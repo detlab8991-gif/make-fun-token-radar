@@ -1,9 +1,12 @@
 // Token Radar: a fitted, honest token-launch radar.
-// Written fresh in this build session (round 2, 24 Nov 2026). Standard
-// library only, no network, no clock, no unseeded randomness: every run on
-// the same snapshot writes the same bytes. The one seeded PRNG below
-// (mulberry32, fixed seed) is used only for the bootstrap confidence
-// interval, so it is deterministic too.
+// Written fresh in this build session (round 2, 24 Nov 2026; round 3
+// added multi-scheme held-out validation, conformal intervals and rank
+// ranges on 24 Nov 2026, without touching the frozen model, the verdict
+// thresholds, the odds cap or the public share). Standard library only,
+// no network, no clock, no unseeded randomness: every run on the same
+// snapshot writes the same bytes. The one seeded PRNG below (mulberry32,
+// fixed seed) is used only for the bootstrap confidence interval, so it
+// is deterministic too.
 //
 // MODEL (fitted at run time from the snapshot itself, never hardcoded):
 //   Launch value: log10(mcap) = a + b*log10(TVL), OLS on the 128 protocols
@@ -30,7 +33,12 @@
 //   Expected value: EV = launch value x launch odds x public share, with
 //   public share a LABELLED assumption (median 10%, range 5-15%) because the
 //   snapshot carries no supply or airdrop data to fit it from.
-//   The board ranks by median EV. P10/P90 come from the LOO residual spread.
+//   The board ranks by median EV. P10/P90 come from the LOO residual
+//   spread, as conformal quantiles (round 3): the 80% interval is the
+//   fitted value plus/minus the conformal absolute-residual quantile
+//   (finite-sample corrected), 90% for confidence-C rows. Each row also
+//   carries a rank range: the ranks it would take at its P10 / P90 while
+//   every other row stayed at its median.
 //   AMBIGUOUS ROWS: a protocol whose product token already trades (a
 //   stablecoin, a tokenised-asset receipt, a subnet token) is NOT a
 //   pre-token protocol, even when the snapshot records no gecko_id/symbol
@@ -106,6 +114,9 @@ export interface RadarRow extends BoardRow {
   ambiguous: string | null;
   eligibility_note: string;
   change_note: string;
+  rank_lo: number;
+  rank_hi: number;
+  capital_ceiling_farm_usd: number | null;
 }
 
 export interface VariantTest {
@@ -117,6 +128,39 @@ export interface VariantTest {
   boot_ci_high: number;
   accepted: boolean;
   note: string;
+}
+
+// Round 3: one held-out scheme, computed at run time from a train/test
+// split of the 128 peers. `med_abs_pct` is the median absolute error on
+// the held-out peers; `naive_med_abs_pct` is the same number for the
+// one-ratio baseline fitted on the TRAINING peers only.
+export interface HeldOutScheme {
+  name: string;
+  label: string;
+  n_test: number;
+  med_abs_pct: number;
+  within2x_pct: number;
+  within3x_pct: number;
+  naive_med_abs_pct: number;
+  note: string;
+}
+
+// Round 3: ranking-aligned validation, computed at run time. Spearman and
+// the top-quartile hit rate are computed on the leave-one-out predictions
+// (a radar ranks, so rank accuracy matters more than point accuracy);
+// the conformal quantiles come from the LOO residuals with the
+// finite-sample correction ceil((n+1) * level) / n.
+export interface Validation {
+  loo_spearman: number;
+  loo_spearman_naive: number;
+  loo_top_quartile_hit_pct: number;
+  loo_top_quartile_hit_naive_pct: number;
+  held_out: HeldOutScheme[];
+  conformal_q80_dex: number;
+  conformal_q90_dex: number;
+  conformal_q25_dex: number;
+  conformal_coverage80: number;
+  conformal_coverage90: number;
 }
 
 export interface ModelMetrics {
@@ -138,12 +182,22 @@ export interface ModelMetrics {
   public_share_high: number;
   model_variant: string;
   variant_tests: VariantTest[];
+  loo_spearman: number;
+  loo_spearman_naive: number;
+  loo_top_quartile_hit_pct: number;
+  loo_top_quartile_hit_naive_pct: number;
+  conformal_q80_dex: number;
+  conformal_q90_dex: number;
+  conformal_q25_dex: number;
+  conformal_coverage80: number;
+  conformal_coverage90: number;
 }
 
 export interface Radar {
   as_of: string;
   rows: RadarRow[];
   metrics: ModelMetrics;
+  validation: Validation;
   ledger: { label: string; count: number; reason: string }[];
   ambiguous_rows: { slug: string; name: string; reason: string }[];
   watchlist_size: number;
@@ -250,6 +304,112 @@ function median(xs: number[]): number {
   const n = s.length;
   if (n === 0) return 0;
   return n % 2 === 1 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2;
+}
+
+// Linear-interpolation quantile of an already-sorted array (type 7).
+function quantile(sorted: number[], p: number): number {
+  const n = sorted.length;
+  if (n === 0) return 0;
+  if (n === 1) return sorted[0]!;
+  const h = p * (n - 1);
+  const lo = Math.floor(h);
+  const hi = Math.ceil(h);
+  if (lo === hi) return sorted[lo]!;
+  return sorted[lo]! + (h - lo) * (sorted[hi]! - sorted[lo]!);
+}
+
+// Conformal absolute-residual quantile with the finite-sample correction:
+// the ceil((n+1) * level)-th smallest |residual| (1-based), clamped to n.
+// With n = 128 and level 0.8 that is the 104th smallest |residual|.
+function conformalAbsQuantile(absSorted: number[], level: number): number {
+  const n = absSorted.length;
+  if (n === 0) return 0;
+  const k = Math.min(n, Math.max(1, Math.ceil((n + 1) * level)));
+  return absSorted[k - 1]!;
+}
+
+// Average ranks (1-based) with ties averaged, for Spearman.
+function ranksWithTies(xs: number[]): number[] {
+  const order = xs.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const r = new Array<number>(xs.length).fill(0);
+  let i = 0;
+  while (i < order.length) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1]!.v === order[i]!.v) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) r[order[k]!.i] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+
+function spearman(x: number[], y: number[]): number {
+  const rx = ranksWithTies(x);
+  const ry = ranksWithTies(y);
+  const n = x.length;
+  const mx = rx.reduce((s, v) => s + v, 0) / n;
+  const my = ry.reduce((s, v) => s + v, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (rx[i]! - mx) * (ry[i]! - my);
+    sxx += (rx[i]! - mx) ** 2;
+    syy += (ry[i]! - my) ** 2;
+  }
+  return sxx === 0 || syy === 0 ? 0 : sxy / Math.sqrt(sxx * syy);
+}
+
+// Light fit of the frozen size-only structure on a peer subset: OLS on
+// log10(TVL) plus the count-shrunk per-category median residual. No LOO
+// inside — used for the held-out schemes, where the test set is separate.
+function fitPredictor(
+  train: SnapshotProtocol[],
+  asOf: string,
+): ((p: SnapshotProtocol, age: number | null) => number) | null {
+  const x = train.map((p) => Math.log10(p.tvl_usd));
+  const y = train.map((p) => Math.log10(p.mcap_usd!));
+  const { a, b } = ols(x, y);
+  if (!isFinite(a) || !isFinite(b)) return null;
+  const resid = y.map((v, i) => v - (a + b * x[i]!));
+  const adj = categoryAdj(train, resid, 'count');
+  return (p) => a + b * Math.log10(p.tvl_usd) + (adj.get(p.category ?? 'Unknown') ?? 0);
+}
+
+interface HeldOutPreds {
+  logErrs: number[];
+  errsPct: number[];
+  naiveErrsPct: number[];
+}
+
+// Fit on `train`, predict `test`. The naive baseline is the median
+// mcap/TVL ratio fitted on the TRAINING peers only, so the comparison is
+// on the same held-out peers.
+function heldOutPredictions(train: SnapshotProtocol[], test: SnapshotProtocol[], asOf: string): HeldOutPreds | null {
+  const predict = fitPredictor(train, asOf);
+  if (predict === null || test.length === 0) return null;
+  const trainRatio = median(train.map((p) => p.mcap_usd! / p.tvl_usd));
+  const logErrs: number[] = [];
+  const errsPct: number[] = [];
+  const naiveErrsPct: number[] = [];
+  for (const p of test) {
+    const actual = Math.log10(p.mcap_usd!);
+    const e = actual - predict(p, ageDays(p.listed_at, asOf));
+    logErrs.push(e);
+    errsPct.push(Math.abs(Math.pow(10, e) - 1) * 100);
+    naiveErrsPct.push(Math.abs(p.mcap_usd! / (trainRatio * p.tvl_usd) - 1) * 100);
+  }
+  return { logErrs, errsPct, naiveErrsPct };
+}
+
+function summarizeHeldOut(p: HeldOutPreds): { med: number; w2: number; w3: number; naiveMed: number; n: number } {
+  return {
+    med: median(p.errsPct),
+    w2: (p.logErrs.filter((e) => Math.abs(e) <= Math.log10(2)).length / p.logErrs.length) * 100,
+    w3: (p.logErrs.filter((e) => Math.abs(e) <= Math.log10(3)).length / p.logErrs.length) * 100,
+    naiveMed: median(p.naiveErrsPct),
+    n: p.logErrs.length,
+  };
 }
 
 // Solve A x = b by Gaussian elimination with partial pivoting. A tiny ridge
@@ -790,10 +950,133 @@ export function buildRadar(snapshot: Snapshot): Radar {
   const looWithin2xPct = (vm.looResidDex.filter((e) => Math.abs(e) <= Math.log10(2)).length / Math.max(1, vm.looResidDex.length)) * 100;
   const looWithin3xPct = (vm.looResidDex.filter((e) => Math.abs(e) <= Math.log10(3)).length / Math.max(1, vm.looResidDex.length)) * 100;
 
+  // --- Round 3: ranking-aligned validation, held-out three ways, conformal intervals ---
+  // Spearman + top-quartile hit rate on the LOO predictions: a radar ranks,
+  // so rank accuracy is the metric aligned with the job. The naive baseline
+  // predicts mcap = median-ratio x TVL, i.e. it ranks by TVL alone.
+  const looActual = peers.map((p) => Math.log10(p.mcap_usd!));
+  const looPred = looActual.map((v, i) => v - vm.looResidDex[i]!);
+  const looPredNaive = peers.map((p) => Math.log10(medRatio * p.tvl_usd));
+  const looSpearman = spearman(looPred, looActual);
+  const looSpearmanNaive = spearman(looPredNaive, looActual);
+  const topQuartileHit = (pred: number[]): number => {
+    const n = pred.length;
+    const k = Math.floor(n / 4);
+    const topPred = new Set(
+      pred.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v).slice(0, k).map((o) => o.i),
+    );
+    const topActual = new Set(
+      looActual.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v).slice(0, k).map((o) => o.i),
+    );
+    let hit = 0;
+    for (const i of topPred) if (topActual.has(i)) hit++;
+    return (hit / k) * 100;
+  };
+  const looTopHit = topQuartileHit(looPred);
+  const looTopHitNaive = topQuartileHit(looPredNaive);
+
+  // (a) Leave-category-out: every peer predicted exactly once, by a model
+  // trained on all OTHER categories. This directly tests the confidence-C
+  // rows, whose categories have few peers.
+  const lcoPooled: HeldOutPreds = { logErrs: [], errsPct: [], naiveErrsPct: [] };
+  const catNames = [...new Set(peers.map((p) => p.category ?? 'Unknown'))];
+  for (const cat of catNames) {
+    const test = peers.filter((p) => (p.category ?? 'Unknown') === cat);
+    const train = peers.filter((p) => (p.category ?? 'Unknown') !== cat);
+    const r = heldOutPredictions(train, test, asOf);
+    if (r === null) throw new Error('leave-category-out failed for ' + cat);
+    lcoPooled.logErrs.push(...r.logErrs);
+    lcoPooled.errsPct.push(...r.errsPct);
+    lcoPooled.naiveErrsPct.push(...r.naiveErrsPct);
+  }
+  const lco = summarizeHeldOut(lcoPooled);
+  // (b) Size extrapolation: train on the smaller half of peers by TVL,
+  // test on the larger half.
+  const byTvl = [...peers].sort((a, b) => a.tvl_usd - b.tvl_usd);
+  const sizeSplit = heldOutPredictions(byTvl.slice(0, 64), byTvl.slice(64), asOf);
+  if (sizeSplit === null) throw new Error('size held-out split failed');
+  const size = summarizeHeldOut(sizeSplit);
+  // (c) Listing-age sequential split: train on the older half of dated
+  // peers, test on the newer half. This is a split by listing age, NOT a
+  // walk-forward test — the snapshot has tracking-start dates, not
+  // token-launch dates, so no launch timeline exists to walk forward over.
+  // 33 peers record no listed_at and are excluded from this scheme only.
+  const dated = peers.filter((p) => p.listed_at !== null).sort((a, b) => (a.listed_at! < b.listed_at! ? -1 : 1));
+  const ageSplit = heldOutPredictions(dated.slice(0, 47), dated.slice(47), asOf);
+  if (ageSplit === null) throw new Error('age held-out split failed');
+  const age = summarizeHeldOut(ageSplit);
+
+  // Conformal intervals from the LOO residuals (jackknife-style): the
+  // 80% / 90% interval is the fitted value plus/minus the conformal
+  // absolute-residual quantile, with the finite-sample correction. The
+  // P25 used for the "robust" verdict is the 25th percentile of the same
+  // residuals. Empirical coverage is computed honestly: each peer is
+  // judged against the quantile of the OTHER 127 residuals.
+  const looResidSorted = [...vm.looResidDex].sort((a, b) => a - b);
+  const looAbsSorted = vm.looResidDex.map((e) => Math.abs(e)).sort((a, b) => a - b);
+  const confQ80 = conformalAbsQuantile(looAbsSorted, 0.8);
+  const confQ90 = conformalAbsQuantile(looAbsSorted, 0.9);
+  const confQ25 = quantile(looResidSorted, 0.25);
+  const coverageAt = (level: number): number => {
+    let inside = 0;
+    for (let i = 0; i < vm.looResidDex.length; i++) {
+      const others = vm.looResidDex.filter((_, j) => j !== i).map((e) => Math.abs(e)).sort((a, b) => a - b);
+      if (Math.abs(vm.looResidDex[i]!) <= conformalAbsQuantile(others, level)) inside++;
+    }
+    return (inside / vm.looResidDex.length) * 100;
+  };
+  const confCov80 = coverageAt(0.8);
+  const confCov90 = coverageAt(0.9);
+
+  const validation: Validation = {
+    loo_spearman: looSpearman,
+    loo_spearman_naive: looSpearmanNaive,
+    loo_top_quartile_hit_pct: looTopHit,
+    loo_top_quartile_hit_naive_pct: looTopHitNaive,
+    held_out: [
+      {
+        name: 'leave-category-out',
+        label: 'Leave-category-out (train on all other categories, test the held-out one)',
+        n_test: lco.n,
+        med_abs_pct: lco.med,
+        within2x_pct: lco.w2,
+        within3x_pct: lco.w3,
+        naive_med_abs_pct: lco.naiveMed,
+        note: `${catNames.length} categories, every one of the 128 peers predicted once. Directly tests the confidence-C rows.`,
+      },
+      {
+        name: 'small-tvl-train-large-tvl-test',
+        label: 'Size extrapolation (train on the smaller half by TVL, test on the larger half)',
+        n_test: size.n,
+        med_abs_pct: size.med,
+        within2x_pct: size.w2,
+        within3x_pct: size.w3,
+        naive_med_abs_pct: size.naiveMed,
+        note: 'Split at the peer TVL median ($31.7M). Tests whether the size curve extrapolates upward.',
+      },
+      {
+        name: 'older-listed-train-newer-listed-test',
+        label: 'Listing-age sequential split (train on older listings, test on newer listings)',
+        n_test: age.n,
+        med_abs_pct: age.med,
+        within2x_pct: age.w2,
+        within3x_pct: age.w3,
+        naive_med_abs_pct: age.naiveMed,
+        note: 'Split berurutan umur listing (listed_at), BUKAN walk-forward: the snapshot has tracking-start dates, not token-launch dates. 33 peers record no listed_at and are excluded from this scheme only.',
+      },
+    ],
+    conformal_q80_dex: confQ80,
+    conformal_q90_dex: confQ90,
+    conformal_q25_dex: confQ25,
+    conformal_coverage80: confCov80,
+    conformal_coverage90: confCov90,
+  };
+
   const om = fitOddsModel(snapshot.protocols, asOf);
-  const z80 = 1.2816;
-  const z90 = 1.6449; // wider interval for confidence-C rows (< 5 peers)
-  const z25 = 0.6745;
+  // Round 3: intervals are conformal quantiles of the LOO residuals, not
+  // z x std. Confidence-C rows (< 5 peers) use the 90% quantile, A/B rows
+  // the 80% quantile; the P25 for the "robust" verdict is the 25th
+  // percentile of the same residuals.
   const eligible = snapshot.protocols.filter(isEligible);
   const peerCounts = peerCatCount(peers);
   const peerNames = peerNamesByCat(peers);
@@ -805,14 +1088,14 @@ export function buildRadar(snapshot: Snapshot): Radar {
     const launch = Math.pow(10, logLaunch);
     const peerN = peerCounts.get(cat) ?? 0;
     const confidence: RadarRow['confidence'] = peerN >= 10 ? 'A' : peerN >= 5 ? 'B' : 'C';
-    const z = confidence === 'C' ? z90 : z80;
-    const launchP10 = launch * Math.pow(10, -z * vm.looStd);
-    const launchP90 = launch * Math.pow(10, z * vm.looStd);
+    const q = confidence === 'C' ? confQ90 : confQ80;
+    const launchP10 = launch * Math.pow(10, -q);
+    const launchP90 = launch * Math.pow(10, q);
     const odds = launchOdds(p, asOf, om);
     const ev = launch * odds * 0.1;
     const evP10 = launchP10 * odds * 0.05;
     const evP90 = launchP90 * odds * 0.15;
-    const evP25 = launch * Math.pow(10, -z25 * vm.looStd) * odds * 0.075;
+    const evP25 = launch * Math.pow(10, confQ25) * odds * 0.075;
     const chain = p.chains[0] ?? 'Ethereum';
     const gasCosts = gasCostsForChain(chain);
     const gasTotal = gasCosts.reduce((s, v) => s + v, 0);
@@ -837,6 +1120,15 @@ export function buildRadar(snapshot: Snapshot): Radar {
     const verdictOptimistic: RadarRow['verdict'] = netOptPerHour >= 5 ? 'FARM' : netOptPerHour >= 1 ? 'THIN' : 'SKIP';
     // Break-even wallet count: FARM needs net/hour >= $5, i.e. wallets <= EV / (farmCost + 5*hours).
     const breakeven = farmCost + 5 * hours <= 0 ? null : Math.max(0, Math.round(ev / (farmCost + 5 * hours)));
+    // Deposit ceiling for FARM (round 3): the payout per wallet does not
+    // grow with the deposit in this model, so a bigger deposit only adds
+    // opportunity cost (5%/yr) and slippage (0.3%). The ceiling is the
+    // largest deposit that still nets $5/hour; above it the row stops
+    // being FARM. If even a $0 deposit cannot net $5/hour (gas alone eats
+    // it), no deposit size makes the row FARM — the ceiling is null.
+    const capRate = 0.05 * (holdDays / 365) + 0.003;
+    const ceilingRaw = (grossPerWallet - gasTotal - 5 * hours) / capRate;
+    const capitalCeiling = ceilingRaw > 0 ? Math.round(ceilingRaw) : null;
     const netP25 = (evP25 / walletsMedian) - farmCost;
     const verdictP25: RadarRow['verdict'] = netP25 / hours >= 5 ? 'FARM' : netP25 / hours >= 1 ? 'THIN' : 'SKIP';
     const ambiguous = ambiguousReason(p);
@@ -886,12 +1178,28 @@ export function buildRadar(snapshot: Snapshot): Radar {
       ambiguous,
       eligibility_note: '',
       change_note: changeNote,
+      rank_lo: 0,
+      rank_hi: 0,
+      capital_ceiling_farm_usd: capitalCeiling,
     });
   }
   rows.sort((a, b) => b.implied_value_usd - a.implied_value_usd || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
   rows.forEach((r, i) => {
     r.rank = i + 1;
   });
+  // Rank range (round 3): the ranks this row would take if its launch
+  // value sat at its P10 / P90 (conformal) while every other row stayed
+  // at its median. Best rank = 1 + OTHER rows whose median EV beats this
+  // row's P90 EV; worst = 1 + OTHER rows whose median EV beats its P10
+  // EV (the row itself is excluded from both counts, so the range stays
+  // inside 1..N). Public share is held at 10% for both, so the range
+  // isolates model uncertainty — it does not move the rank itself.
+  for (const r of rows) {
+    const evAtP10 = r.launch_p10_usd * r.launch_odds * 0.1;
+    const evAtP90 = r.launch_p90_usd * r.launch_odds * 0.1;
+    r.rank_lo = 1 + rows.filter((o) => o !== r && o.implied_value_usd > evAtP90).length;
+    r.rank_hi = 1 + rows.filter((o) => o !== r && o.implied_value_usd > evAtP10).length;
+  }
   // One eligibility line per top-20 row (gate for step 1); the rest get the
   // shorter, honest note that they were not individually swept.
   for (const r of rows) {
@@ -940,7 +1248,17 @@ export function buildRadar(snapshot: Snapshot): Radar {
       public_share_high: 0.15,
       model_variant: modelVariant,
       variant_tests: variantTests,
+      loo_spearman: looSpearman,
+      loo_spearman_naive: looSpearmanNaive,
+      loo_top_quartile_hit_pct: looTopHit,
+      loo_top_quartile_hit_naive_pct: looTopHitNaive,
+      conformal_q80_dex: confQ80,
+      conformal_q90_dex: confQ90,
+      conformal_q25_dex: confQ25,
+      conformal_coverage80: confCov80,
+      conformal_coverage90: confCov90,
     },
+    validation,
     ledger,
     ambiguous_rows: ambiguousRows,
     watchlist_size: snapshot.watchlist.length,
