@@ -5,25 +5,26 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 Georgia, 'Times New Roman', serif; }
-.top { display: flex; justify-content: space-between; gap: 16px; padding: 20px 24px 8px; }
-.top h1 { margin: 0; font-size: 34px; letter-spacing: .5px; color: var(--teal); }
-.sub { margin: 6px 0 0; color: var(--muted); max-width: 720px; font-size: 14px; }
+.top { display: flex; justify-content: space-between; gap: 16px; padding: 12px 24px 4px; }
+.top h1 { margin: 0; font-size: 26px; letter-spacing: .5px; color: var(--teal); }
+.sub { margin: 4px 0 0; color: var(--muted); max-width: 720px; font-size: 13px; }
 .badge { align-self: flex-start; background: var(--teal); color: #fff; font: bold 11px/1.4 system-ui, sans-serif; letter-spacing: 1px; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
-.kpi, .integrity { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 24px; }
-.kpi .stat { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 150px; }
-.kpi .stat b { display: block; font-size: 22px; color: var(--teal); font-family: system-ui, sans-serif; }
-.kpi .stat span { font-size: 12px; color: var(--muted); font-family: system-ui, sans-serif; }
-.integrity .check { background: var(--teal-soft); border-radius: 999px; padding: 5px 12px; font: 12px system-ui, sans-serif; }
+.kpi, .integrity { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 24px; }
+.kpi .stat { flex: 1 1 0; min-width: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+.kpi .stat b { display: block; font-size: 18px; color: var(--teal); font-family: system-ui, sans-serif; }
+.kpi .stat span { font-size: 11px; color: var(--muted); font-family: system-ui, sans-serif; }
+.integrity .check { background: var(--teal-soft); border-radius: 999px; padding: 3px 9px; font: 11px system-ui, sans-serif; }
 .integrity .check.warn { background: #fde68a; }
-.tabs { display: flex; gap: 8px; padding: 6px 24px; }
-.tabs button { font: bold 14px system-ui, sans-serif; padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); cursor: pointer; }
+.tabs { display: flex; gap: 8px; padding: 4px 24px; }
+.tabs button { font: bold 13px system-ui, sans-serif; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); cursor: pointer; }
 .tabs button.on { background: var(--teal); color: #fff; border-color: var(--teal); }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 24px; }
-.controls input, .controls select { font: 14px system-ui, sans-serif; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 24px; }
+.controls input, .controls select { font: 14px system-ui, sans-serif; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
 .controls input { flex: 1 1 220px; }
-main, .detail { padding: 0 24px 24px; }
-table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-family: system-ui, sans-serif; font-size: 13px; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+main, .detail { padding: 0 24px 16px; }
+table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-family: system-ui, sans-serif; font-size: 12px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cell-note { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
 th { background: var(--teal-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
 tr:hover td { background: #f3efe2; }
 tr.sel td { background: #fef3c7; }
@@ -54,5 +55,5 @@ tr.sel td { background: #fef3c7; }
 .method h3 { color: var(--teal); }
 .method table { margin: 8px 0; }
 .foot { padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
-.note { color: var(--muted); font-size: 13px; }
+.note { color: var(--muted); font-size: 12px; }
 @media (max-width: 700px) { .top { flex-direction: column; } th:nth-child(4), td:nth-child(4) { display: none; } }
