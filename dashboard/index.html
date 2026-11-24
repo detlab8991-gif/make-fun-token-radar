@@ -10,7 +10,7 @@
 <header class="top">
   <div>
     <h1>Token Radar</h1>
-    <p class="sub">Every protocol DefiLlama tracks that records no token yet, ranked by what its launch would be worth. Snapshot 14 Nov 2026. No token is promised: these are estimates, not forecasts.</p>
+    <p class="sub">Every protocol DefiLlama tracks that records no token yet, ranked by what its launch would be worth. Snapshot 14 Nov 2026. No token is promised: these are estimates, not forecasts. Rows flagged AMBIGUOUS have a product token that already trades.</p>
   </div>
   <div class="badge">OFFLINE · NO NETWORK</div>
 </header>
@@ -29,6 +29,11 @@
     <option value="FARM">FARM</option>
     <option value="THIN">THIN</option>
     <option value="SKIP">SKIP</option>
+  </select>
+  <select id="fconf" aria-label="Filter by confidence">
+    <option value="all">All confidences</option>
+    <option value="AB">Confidence A or B only</option>
+    <option value="C">Confidence C only</option>
   </select>
   <select id="sort" aria-label="Sort by">
     <option value="ev">Sort: expected value</option>
