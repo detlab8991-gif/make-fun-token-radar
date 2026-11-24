@@ -1,0 +1,53 @@
+:root {
+  --bg: #f7f3ea; --paper: #fffdf6; --ink: #20242b; --muted: #5b6068;
+  --line: #e3dcc9; --teal: #0e6b62; --teal-soft: #dcebe8; --amber: #b45309;
+  --green: #166534; --green-soft: #dcfce7; --grey-soft: #e5e7eb; --red: #991b1b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 Georgia, 'Times New Roman', serif; }
+.top { display: flex; justify-content: space-between; gap: 16px; padding: 20px 24px 8px; }
+.top h1 { margin: 0; font-size: 34px; letter-spacing: .5px; color: var(--teal); }
+.sub { margin: 6px 0 0; color: var(--muted); max-width: 720px; font-size: 14px; }
+.badge { align-self: flex-start; background: var(--teal); color: #fff; font: bold 11px/1.4 system-ui, sans-serif; letter-spacing: 1px; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+.kpi, .integrity { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 24px; }
+.kpi .stat { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 150px; }
+.kpi .stat b { display: block; font-size: 22px; color: var(--teal); font-family: system-ui, sans-serif; }
+.kpi .stat span { font-size: 12px; color: var(--muted); font-family: system-ui, sans-serif; }
+.integrity .check { background: var(--teal-soft); border-radius: 999px; padding: 5px 12px; font: 12px system-ui, sans-serif; }
+.integrity .check.warn { background: #fde68a; }
+.tabs { display: flex; gap: 8px; padding: 6px 24px; }
+.tabs button { font: bold 14px system-ui, sans-serif; padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); cursor: pointer; }
+.tabs button.on { background: var(--teal); color: #fff; border-color: var(--teal); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 24px; }
+.controls input, .controls select { font: 14px system-ui, sans-serif; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.controls input { flex: 1 1 220px; }
+main, .detail { padding: 0 24px 24px; }
+table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-family: system-ui, sans-serif; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--teal-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+tr:hover td { background: #f3efe2; }
+tr.sel td { background: #fef3c7; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.bar { height: 8px; background: var(--grey-soft); border-radius: 99px; overflow: hidden; min-width: 70px; }
+.bar i { display: block; height: 100%; background: var(--teal); }
+.pill { display: inline-block; font: bold 11px system-ui, sans-serif; padding: 3px 8px; border-radius: 999px; }
+.pill.FARM { background: var(--green-soft); color: var(--green); }
+.pill.THIN { background: #fef3c7; color: var(--amber); }
+.pill.SKIP { background: var(--grey-soft); color: var(--muted); }
+.pill.conf-A { background: var(--teal-soft); color: var(--teal); }
+.pill.conf-B { background: #fef3c7; color: var(--amber); }
+.pill.conf-C { background: var(--grey-soft); color: var(--muted); }
+.detail { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; margin: 0 24px 24px; padding: 18px 20px; }
+.detail h2 { margin: 0 0 4px; color: var(--teal); font-size: 24px; }
+.detail h3 { margin: 18px 0 6px; font-size: 16px; color: var(--teal); }
+.detail .formula { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.7 ui-monospace, monospace; }
+.detail ol { margin: 6px 0; padding-left: 22px; }
+.detail li { margin-bottom: 6px; }
+.ok { color: var(--green); font-weight: bold; }
+.ledger td, .ledger th { font-size: 13px; }
+.method { font-size: 14px; }
+.method h3 { color: var(--teal); }
+.method table { margin: 8px 0; }
+.foot { padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
+.note { color: var(--muted); font-size: 13px; }
+@media (max-width: 700px) { .top { flex-direction: column; } th:nth-child(4), td:nth-child(4) { display: none; } }

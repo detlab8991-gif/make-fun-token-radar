@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar: pre-token protocols ranked by expected launch value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Token Radar</h1>
+    <p class="sub">Every protocol DefiLlama tracks that records no token yet, ranked by what its launch would be worth. Snapshot 14 Nov 2026. No token is promised: these are estimates, not forecasts.</p>
+  </div>
+  <div class="badge">OFFLINE · NO NETWORK</div>
+</header>
+<section id="kpi" class="kpi" aria-label="Headline figures"></section>
+<section id="integrity" class="integrity" aria-label="Integrity checks"></section>
+<nav class="tabs" aria-label="Views">
+  <button data-tab="board" class="on">Board</button>
+  <button data-tab="ledger">Ledger: all 758</button>
+  <button data-tab="method">Method &amp; honesty</button>
+</nav>
+<section id="controls" class="controls">
+  <input id="q" type="search" placeholder="Search a protocol…" aria-label="Search">
+  <select id="fcat" aria-label="Filter by category"><option value="all">All categories</option></select>
+  <select id="fverdict" aria-label="Filter by verdict">
+    <option value="all">All verdicts</option>
+    <option value="FARM">FARM</option>
+    <option value="THIN">THIN</option>
+    <option value="SKIP">SKIP</option>
+  </select>
+  <select id="sort" aria-label="Sort by">
+    <option value="ev">Sort: expected value</option>
+    <option value="launch">Sort: launch value</option>
+    <option value="tvl">Sort: TVL</option>
+    <option value="odds">Sort: launch odds</option>
+    <option value="net">Sort: farm $/hour</option>
+  </select>
+</section>
+<section id="detail" class="detail" hidden></section>
+<main id="board" tabindex="-1"></main>
+<footer class="foot">
+  <p>Built by an AI agent from a sealed DefiLlama snapshot. A protocol "records no token" when DefiLlama records no gecko_id or symbol for it; that is not proof it has none. Nothing here is investment advice, and no airdrop is guaranteed. Figures are rounded to two significant figures because the model's median error is about 86%.</p>
+</footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
