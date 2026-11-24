@@ -76,10 +76,11 @@ if (shots.length < 3) {
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
 
 const top = radar.rows[0]!;
-const boardBytes = JSON.stringify({ rows: board }).length + 1;
+const boardBytes = Buffer.byteLength(`${JSON.stringify({ rows: board })}\n`, 'utf8');
 process.stderr.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${radar.rows.length} rows scored\n` +
-  `token radar: top ${top.slug} EV $${top.implied_value_usd}, verdicts FARM ${radar.farm_counts.FARM} / THIN ${radar.farm_counts.THIN} / SKIP ${radar.farm_counts.SKIP}\n` +
+  `token radar: top ${top.slug} EV $${top.implied_value_usd}, verdicts FARM ${radar.farm_counts.FARM} / THIN ${radar.farm_counts.THIN} / SKIP ${radar.farm_counts.SKIP} (optimistic FARM ${radar.farm_counts_optimistic.FARM})\n` +
   `token radar: board.json ${boardBytes} bytes, LOO median error ${radar.metrics.loo_med_abs_pct.toFixed(1)}%, 80% interval coverage ${(radar.metrics.loo_coverage80 * 100).toFixed(0)}%\n` +
+  `token radar: model ${radar.metrics.model_variant}; multi-feature LOO ${radar.metrics.multi_feature_loo_med_abs_pct.toFixed(1)}%; ambiguous rows ${radar.ambiguous_rows.length}; clean total EV $${radar.total_ev_usd}\n` +
   `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );
